@@ -14,7 +14,7 @@ from src.trading.order_executor import OrderExecutor
 from src.strategy.base import StrategyType
 from src.strategy.ai_strategist import AIStrategist
 from src.strategy.ml_strategist import MLStrategist
-from src.strategy.custom_strategist import CustomStrategist
+from src.strategy.custom_strategist import CustomStrategy
 from src.backtest.backtest_engine import BacktestEngine
 from src.utils.market_scanner import MarketScanner
 
@@ -29,7 +29,7 @@ def get_strategist(config: Config):
     elif config.strategy_type == StrategyType.ML:
         return MLStrategist(config)
     elif config.strategy_type == StrategyType.CUSTOM:
-        return CustomStrategist(config)
+        return CustomStrategy(config)
     else:
         raise ValueError(f"Unknown strategy type: {config.strategy_type}")
 

@@ -3,10 +3,9 @@
 import sys
 from pathlib import Path
 from loguru import logger
-from loguru.logger import Logger
 
 
-def setup_logging(debug: bool = False, log_file: str = None) -> Logger:
+def setup_logging(debug: bool = False, log_file: str = None):
     """Configure loguru logging"""
 
     # Remove default handler
@@ -36,7 +35,7 @@ def setup_logging(debug: bool = False, log_file: str = None) -> Logger:
     return logger
 
 
-def get_logger(name: str = None) -> Logger:
+def get_logger(name: str = None):
     """Get a logger instance"""
     if name:
         return logger.bind(name=name)

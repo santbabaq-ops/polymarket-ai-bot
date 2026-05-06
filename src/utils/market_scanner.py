@@ -4,7 +4,7 @@ import re
 from typing import List, Optional
 
 from src.utils.logging import get_logger
-from .polymarket_client import PolymarketClient
+from src.trading.polymarket_client import PolymarketClient
 
 
 logger = get_logger(__name__)

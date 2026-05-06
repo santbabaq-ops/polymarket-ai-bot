@@ -130,6 +130,7 @@ class TestOrderExecutor:
         """Create executor with mocked dependencies"""
         polymarket = MagicMock(spec=PolymarketClient)
         polymarket.address = "0x1234567890123456789012345678901234567890"
+        polymarket.CLOB_EXCHANGE_ADDRESS = "0x4bfb41d5b3570defd03c39a9a4d8de6bd8b8982e"
 
         gelato = MagicMock(spec=GelatoRelay)
 

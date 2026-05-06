@@ -60,7 +60,7 @@ class PerformanceAnalyzer:
         winning_trades = [p for p in pnls if p > 0]
         losing_trades = [abs(p) for p in pnls if p <= 0]
 
-        total_return = sum(pnls)
+        total_return = sum(returns)  # Sum of return percentages
         avg_trade = statistics.mean(returns) if returns else 0
 
         # Calculate metrics

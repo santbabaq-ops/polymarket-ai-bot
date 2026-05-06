@@ -69,7 +69,10 @@ class PolymarketClient:
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("markets", [])
+            # API returns a list directly
+            if isinstance(data, list):
+                return data
+            return data.get("markets", []) if isinstance(data, dict) else []
         except Exception as e:
             logger.error(f"Failed to fetch markets: {e}")
             return []

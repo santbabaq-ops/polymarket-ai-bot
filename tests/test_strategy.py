@@ -114,9 +114,9 @@ class TestPositionSizer:
             kelly_fraction=1.0  # Full Kelly
         )
 
-        # Simulate daily loss
+        # Simulate daily loss (exceeds 10% = 1000 limit)
+        sizer.update_bankroll(-600)
         sizer.update_bankroll(-500)
-        sizer.update_bankroll(-400)
 
         # Next position should be blocked
         position = sizer.calculate_size(0.5, 0.7, confidence=1.0)

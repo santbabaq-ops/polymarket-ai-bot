@@ -152,7 +152,8 @@ class PositionSizer:
     def update_bankroll(self, pnl: float) -> None:
         """Update bankroll after a trade"""
         self.bankroll += pnl
-        self.daily_loss += min(0, pnl)  # Track only losses
+        if pnl < 0:
+            self.daily_loss += abs(pnl)  # Track losses as positive
 
     def check_risk_limits(self) -> bool:
         """Check if any risk limits are hit"""

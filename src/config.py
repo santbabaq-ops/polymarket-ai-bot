@@ -88,6 +88,8 @@ class Config:
 
         if not self.wallet_private_key:
             errors.append("POLYGON_WALLET_PRIVATE_KEY is required")
+        elif len(self.wallet_private_key) < 64:
+            errors.append("POLYGON_WALLET_PRIVATE_KEY must be 64 hex characters (32 bytes)")
 
         if self.strategy_type == StrategyType.AI and not self.anthropic_api_key:
             errors.append("ANTHROPIC_API_KEY is required for AI strategy")

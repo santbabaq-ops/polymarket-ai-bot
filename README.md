@@ -1,208 +1,191 @@
 # Polymarket AI Trading Bot
 
-An autonomous AI-powered trading bot for Polymarket 5min/15min prediction markets with gasless transactions and backtesting capabilities.
+**无Gas费用交易Polymarket 5min/15min市场的AI量化机器人**
 
-## Features
+## 项目思路
 
-- **Gasless Trading**: Zero gas fees using Gelato Turbo Relayer
-- **Multiple AI Strategies**:
-  - Claude AI-powered market analysis
-  - Local ML models (XGBoost, LightGBM)
-  - Custom strategy interface
-- **Backtesting Engine**: VectorBT-powered fast backtesting
-- **Smart Position Sizing**: Kelly criterion and risk management
-- **Multi-Market Support**: Focus on 5min/15min time-based markets
+### 为什么做这个项目？
 
-## Quick Start
+1. **Polymarket机会**：Polymarket是最大的预测市场，5min/15min的短期市场蕴含大量交易机会
+2. **Gas费痛点**：Polygon网络上每笔交易都需要MATIC作为Gas，小额交易Gas费可能超过利润
+3. **AI决策需求**：预测市场需要快速分析新闻、情绪、数据，AI比人工更适合
+4. **回测重要性**：没有回测的策略如同赌博，必须用历史数据验证
 
-### Prerequisites
+### 核心技术方案
 
-- Python 3.11+
-- Polygon wallet with USDC
-- API keys (see below)
+#### 1. Gasless交易方案
 
-### Installation
+**问题**：Polygon每笔交易需要Gas费
+
+**解决方案**：使用Gelato Turbo Relayer
+- Gelato是一个去中心化的自动化网络
+- 支持"赞助交易"（Sponsored Transactions）
+- 用户签名，Gelato节点代付Gas
+- 通过Gas Tank（Gas池）结算
+
+```
+传统流程：用户 → 付Gas → 执行交易
+Gelato流程：用户签名 → Gelato代付 → 用户交易（零Gas）
+```
+
+#### 2. AI策略架构
+
+**三层决策架构**：
+
+```
+┌─────────────────────────────────────────────────┐
+│  第一层：市场扫描 (Market Scanner)               │
+│  - 扫描5min/15min市场                           │
+│  - 过滤低流动性市场                             │
+│  - 提取市场元数据                               │
+└─────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────┐
+│  第二层：AI分析 (AI Strategist)                  │
+│  - Claude分析市场问题                           │
+│  - 评估概率和信心                               │
+│  - 生成交易信号                                 │
+└─────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────┐
+│  第三层：仓位管理 (Position Sizer)               │
+│  - Kelly准则计算最优仓位                        │
+│  - 风险控制（止损/止盈）                        │
+│  - 每日亏损限制                                 │
+└─────────────────────────────────────────────────┘
+```
+
+#### 3. 回测系统设计
+
+**为什么不直接实盘？**
+- 避免真实亏损
+- 验证策略有效性
+- 优化参数
+
+**回测流程**：
+```
+历史数据 → VectorBT向量化回测 → 性能指标 → 策略优化
+```
+
+**关键指标**：
+- Sharpe比率（风险调整收益）
+- 最大回撤（控制风险）
+- 胜率（期望值）
+- 期望收益（每笔交易的数学期望）
+
+#### 4. 策略对比
+
+| 策略类型 | 优点 | 缺点 | 适用场景 |
+|---------|------|------|---------|
+| AI (Claude) | 分析全面、可解释 | 有延迟、成本 | 大机会判断 |
+| ML (本地) | 快速、低成本 | 需要训练数据 | 短期信号 |
+| 自定义 | 完全灵活 | 需要编程 | 专业量化 |
+
+### 系统架构图
+
+```
+                    ┌─────────────────┐
+                    │   CLI 命令行     │
+                    └────────┬────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+         ▼                   ▼                   ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│   策略引擎       │ │   回测引擎       │ │   交易引擎       │
+│                 │ │                 │ │                 │
+│  ┌───────────┐  │ │  ┌───────────┐  │ │  ┌───────────┐  │
+│  │ Claude AI │  │ │  │ VectorBT  │  │ │  │ Polymarket│  │
+│  └───────────┘  │ │  └───────────┘  │ │  │ CLOB API  │  │
+│  ┌───────────┐  │ │  ┌───────────┐  │ │  └───────────┘  │
+│  │ Local ML  │  │ │  │ 历史数据   │  │ │  ┌───────────┐  │
+│  └───────────┘  │ │  │ 获取      │  │ │  │ Gelato    │  │
+│  ┌───────────┐  │ │  └───────────┘  │ │  │ Gasless   │  │
+│  │ 自定义    │  │ │  ┌───────────┐  │ │  └───────────┘  │
+│  └───────────┘  │ │  │ 性能分析  │  │ │                 │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+```
+
+### 交易流程
+
+```
+1. 扫描市场
+   ↓
+2. 获取市场数据（价格、流动性、订单簿）
+   ↓
+3. AI分析市场
+   ├─ 市场问题是什么？
+   ├─ 当前价格反映什么概率？
+   ├─ 有什么信息差？
+   └─ 生成信号（买入/卖出/持有）
+   ↓
+4. Kelly计算仓位
+   ├─ 胜率 × 赔率 = 期望值
+   └─ 期望值为正才交易
+   ↓
+5. Gelato执行（无Gas）
+   ├─ 签名交易
+   ├─ 发送到Gelato节点
+   └─ 节点代付Gas执行
+   ↓
+6. 监控仓位
+   ├─ 止损线
+   ├─ 止盈线
+   └─ 到期自动平仓
+```
+
+### 技术栈选型理由
+
+| 组件 | 选型 | 理由 |
+|-----|------|------|
+| 语言 | Python 3.11+ | 生态丰富、AI/ML首选 |
+| AI | Claude API | 强大推理能力、预测市场分析 |
+| 回测 | VectorBT | 向量化计算、性能极快 |
+| Gasless | Gelato | 去中心化、免费额度、Polygon原生 |
+| 交易API | py-clob-client | Polymarket官方SDK |
+| Web3 | web3.py + viem | 成熟的以太坊开发库 |
+
+### 风险管理机制
+
+1. **仓位限制**：单笔不超过总资金10%
+2. **每日亏损限制**：当日亏损超过10%自动停止
+3. **Kelly分数**：使用分数Kelly（非全部）增加安全性
+4. **流动性过滤**：只交易流动性好的市场
+5. **Gas预算**：Gelato Gas Tank用完自动暂停
+
+### 项目目标
+
+- [ ] 实现三种策略（AI/ML/自定义）✓
+- [ ] Gelato Gasless集成 ✓
+- [ ] VectorBT回测引擎 ✓
+- [ ] 完整的风险管理体系 ✓
+- [ ] 实盘交易验证
+- [ ] 策略参数优化
+- [ ] Web界面
+
+## 快速开始
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/polymarket-ai-bot.git
-cd polymarket-ai-bot
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+# 安装
 pip install -e ".[dev]"
 
-# Copy environment file
+# 配置
 cp .env.example .env
-```
+# 填入API密钥
 
-### Configuration
-
-Edit `.env` with your API keys:
-
-```env
-# Wallet (required)
-POLYGON_WALLET_PRIVATE_KEY=0x...
-
-# APIs (required)
-ANTHROPIC_API_KEY=sk-ant-...    # For AI strategy
-GELATO_API_KEY=...               # For gasless transactions
-```
-
-### Usage
-
-```bash
-# List available 5min/15min markets
+# 查看市场
 polybot markets
 
-# Run with AI strategy
-polybot run --strategy ai
-
-# Run with ML strategy
-polybot run --strategy ml
-
-# Dry run (no real trades)
-polybot run --strategy ai --dry-run
-
-# Run backtest on a market
+# 回测策略
 polybot backtest <market_id> --strategy ai
 
-# Check bot status
-polybot status bot
-polybot status gelato
-polybot status wallet
+# 实盘运行（模拟）
+polybot run --strategy ai --dry-run
+
+# 实盘运行
+polybot run --strategy ai
 ```
 
-## Project Structure
+## 许可证
 
-```
-polymarket-ai-bot/
-├── src/
-│   ├── main.py              # CLI entry point
-│   ├── config.py            # Configuration management
-│   ├── trading/
-│   │   ├── polymarket_client.py   # Polymarket CLOB API
-│   │   ├── gelato_relay.py        # Gasless transactions
-│   │   └── order_executor.py      # Order execution
-│   ├── strategy/
-│   │   ├── base.py               # Strategy interface
-│   │   ├── ai_strategist.py      # Claude AI strategy
-│   │   ├── ml_strategist.py      # ML-based strategy
-│   │   ├── custom_strategist.py  # Custom strategy loader
-│   │   ├── signal_generator.py   # Multi-indicator signals
-│   │   └── position_sizer.py     # Kelly criterion sizing
-│   ├── backtest/
-│   │   ├── backtest_engine.py     # VectorBT backtesting
-│   │   ├── historical_fetcher.py  # Data fetching
-│   │   └── performance_analyzer.py # Metrics analysis
-│   └── utils/
-│       ├── logging.py
-│       └── market_scanner.py     # Market discovery
-└── tests/                        # Test suite
-```
-
-## Strategies
-
-### AI Strategy (Claude)
-Uses Claude API for natural language market analysis. Generates signals based on:
-- Market question analysis
-- Order book dynamics
-- Volume trends
-
-### ML Strategy
-Local machine learning models trained on historical data:
-- Feature extraction from market data
-- Gradient Boosting classifier
-- Online learning capability
-
-### Custom Strategy
-Load your own strategy from a Python file:
-```python
-from src.strategy.base import BaseStrategy, Signal
-
-class MyStrategy(BaseStrategy):
-    async def analyze(self, market):
-        # Your logic here
-        return Signal(...)
-```
-
-## Backtesting
-
-```python
-from src.backtest.backtest_engine import BacktestEngine
-from src.strategy.ai_strategist import AIStrategist
-
-engine = BacktestEngine(config)
-strategy = AIStrategist(config)
-
-results = await engine.run_backtest(
-    market_id="...",
-    strategy=strategy,
-    initial_capital=10000
-)
-
-print(f"Win Rate: {results.win_rate:.2%}")
-print(f"Sharpe Ratio: {results.sharpe_ratio:.2f}")
-```
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    CLI / Commands                           │
-└─────────────────────────────────────────────────────────────┘
-                          │
-┌─────────────────────────────────────────────────────────────┐
-│                    Strategy Engine                           │
-│  ┌───────────┐  ┌───────────┐  ┌────────────────────────┐  │
-│  │ AI        │  │ ML        │  │ Signal Generator       │  │
-│  │ Strategist│  │ Strategist│  │ (Multi-indicator)      │  │
-│  └───────────┘  └───────────┘  └────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                          │
-┌─────────────────────────────────────────────────────────────┐
-│                 Backtesting Engine                           │
-│  - VectorBT: Fast vectorized backtesting                    │
-│  - Historical Fetcher: Polymarket data                      │
-│  - Performance Analyzer: Comprehensive metrics             │
-└─────────────────────────────────────────────────────────────┘
-                          │
-┌─────────────────────────────────────────────────────────────┐
-│                 Trading Execution Layer                      │
-│  ┌─────────────────────────┐  ┌──────────────────────────┐  │
-│  │ Gelato Turbo Relayer    │  │ Polymarket CLOB Client   │  │
-│  │ (Gasless transactions)  │  │ (Order matching)         │  │
-│  └─────────────────────────┘  └──────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Risk Management
-
-- **Kelly Criterion**: Optimal position sizing based on edge
-- **Stop Loss/Take Profit**: Configurable exit points
-- **Max Drawdown**: Automatic trading halt on losses
-- **Position Limits**: Maximum position size constraints
-
-## Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=src
-
-# Run specific test file
-pytest tests/test_strategy.py
-```
-
-## License
-
-MIT License - see LICENSE file for details.
-
-## Disclaimer
-
-This software is for educational purposes. Cryptocurrency trading involves substantial risk of loss. Past performance does not guarantee future results. Use at your own risk.
+MIT License
