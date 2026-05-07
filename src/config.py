@@ -1,7 +1,7 @@
 """Configuration management for Polymarket AI Bot"""
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -26,13 +26,12 @@ class StrategyType(str, Enum):
 class Config:
     """Main configuration class"""
 
-    # Wallet
+    # Wallet (required)
     wallet_private_key: str = ""
 
     # API Keys
-    anthropic_api_key: str = ""
-    gelato_api_key: str = ""
-    polymarket_api_key: str = ""
+    anthropic_api_key: str = ""  # Required for AI strategy
+    polymarket_api_key: str = ""  # Optional
 
     # Strategy
     strategy_type: StrategyType = StrategyType.AI
@@ -54,9 +53,6 @@ class Config:
     # RPC
     polygon_rpc_url: str = "https://polygon-rpc.com"
 
-    # Gelato
-    gelato_chain_id: int = 137  # Polygon mainnet
-
     # Market filters
     min_market_volume: float = 1000.0  # USDC
     min_market_liquidity: float = 500.0  # USDC
@@ -74,7 +70,6 @@ class Config:
         return cls(
             wallet_private_key=os.getenv("POLYGON_WALLET_PRIVATE_KEY", ""),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-            gelato_api_key=os.getenv("GELATO_API_KEY", ""),
             polymarket_api_key=os.getenv("POLYMARKET_API_KEY", ""),
             strategy_type=StrategyType(os.getenv("STRATEGY_TYPE", "ai")),
             scan_interval=int(os.getenv("SCAN_INTERVAL", "30")),
@@ -82,7 +77,6 @@ class Config:
             stop_loss=float(os.getenv("STOP_LOSS", "0.02")),
             take_profit=float(os.getenv("TAKE_PROFIT", "0.05")),
             polygon_rpc_url=os.getenv("POLYGON_RPC_URL", "https://polygon-rpc.com"),
-            gelato_chain_id=int(os.getenv("GELATO_CHAIN_ID", "137")),
         )
 
     def validate(self) -> list[str]:
@@ -96,11 +90,6 @@ class Config:
 
         if self.strategy_type == StrategyType.AI and not self.anthropic_api_key:
             errors.append("ANTHROPIC_API_KEY is required for AI strategy")
-
-        # Gelato is optional - only needed for on-chain operations
-        # CLOB orders are gasless via Polymarket's native relayer
-        if not self.gelato_api_key:
-            logger.info("GELATO_API_KEY not set - on-chain operations will be unavailable")
 
         if self.max_position_size <= 0:
             errors.append("MAX_POSITION_SIZE must be positive")

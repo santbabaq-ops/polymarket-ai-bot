@@ -4,12 +4,10 @@
 import click
 import asyncio
 import sys
-from pathlib import Path
 
 from src.config import load_config, Config
 from src.utils.logging import setup_logging, get_logger
 from src.trading.polymarket_client import PolymarketClient
-from src.trading.gelato_relay import GelatoRelay
 from src.trading.order_executor import OrderExecutor
 from src.strategy.base import StrategyType
 from src.strategy.ai_strategist import AIStrategist
@@ -54,15 +52,13 @@ def run(strategy, dry_run):
 
     # Initialize components
     polymarket = PolymarketClient(config)
-    # Gelato is optional - only needed for on-chain approvals/automation
-    gelato = GelatoRelay(config) if config.gelato_api_key else None
-    executor = OrderExecutor(polymarket, gelato, config)
+    executor = OrderExecutor(polymarket)
     strategist = get_strategist(config)
     scanner = MarketScanner(polymarket)
 
     try:
         # Main trading loop
-        asyncio.run(trading_loop(scanner, strategist, executor, dry_run))
+        asyncio.run(trading_loop(scanner, strategist, executor, config, dry_run))
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
     except Exception as e:
@@ -70,7 +66,7 @@ def run(strategy, dry_run):
         sys.exit(1)
 
 
-async def trading_loop(scanner, strategist, executor, dry_run):
+async def trading_loop(scanner, strategist, executor, config, dry_run):
     """Main trading loop."""
     while True:
         try:
@@ -158,14 +154,6 @@ def status(task):
         click.echo("=== Bot Status ===")
         click.echo(f"Strategy: {config.strategy_type.value}")
         click.echo(f"Scan Interval: {config.scan_interval}s")
-    elif task == 'gelato':
-        if not config.gelato_api_key:
-            click.echo("Gelato not configured (no API key)")
-            return
-        gelato = GelatoRelay(config)
-        balance = asyncio.run(gelato.get_balance())
-        click.echo(f"=== Gelato Status ===")
-        click.echo(f"Balance: {balance['balance']} {balance['unit']}")
     elif task == 'wallet':
         polymarket = PolymarketClient(config)
         balance = asyncio.run(polymarket.get_usdc_balance())

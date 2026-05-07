@@ -21,14 +21,8 @@ Polymarket的CLOB客户端使用EIP-712离链签名，用户签名订单后提�
 
 ```
 传统流程：用户 → 付Gas → 执行交易
-Gelato流程：用户签名 → Gelato代付 → 执行交易
 Polymarket原生：用户签名(EIP-712) → Polymarket relayer代付 → 执行交易 ✓
 ```
-
-**Gelato的适用场景**（可选）：
-- 代币授权（USDC/CTF approve）
-- 自动化策略（止损/止盈）
-- 条件单执行
 
 #### 2. AI策略架构
 
@@ -100,10 +94,10 @@ Polymarket原生：用户签名(EIP-712) → Polymarket relayer代付 → 执行
 │  │ Claude AI │  │ │  │ VectorBT  │  │ │  │ Polymarket│  │
 │  └───────────┘  │ │  └───────────┘  │ │  │ CLOB API  │  │
 │  ┌───────────┐  │ │  ┌───────────┐  │ │  └───────────┘  │
-│  │ Local ML  │  │ │  │ 历史数据   │  │ │  ┌───────────┐  │
-│  └───────────┘  │ │  │ 获取      │  │ │  │ Gelato    │  │
-│  ┌───────────┐  │ │  └───────────┘  │ │  │ Gasless   │  │
-│  │ 自定义    │  │ │  ┌───────────┐  │ │  └───────────┘  │
+│  │ Local ML  │  │ │  │ 历史数据   │  │ │                 │
+│  └───────────┘  │ │  │ 获取      │  │ │                 │
+│  ┌───────────┐  │ │  └───────────┘  │ │                 │
+│  │ 自定义    │  │ │  ┌───────────┐  │ │                 │
 │  └───────────┘  │ │  │ 性能分析  │  │ │                 │
 └─────────────────┘ └─────────────────┘ └─────────────────┘
 ```
@@ -131,8 +125,8 @@ Polymarket原生：用户签名(EIP-712) → Polymarket relayer代付 → 执行
    └─ Polymarket relayer代付Gas
    ↓
 6. 监控仓位
-   ├─ 止损线（本地或Gelato自动化）
-   ├─ 止盈线（本地或Gelato自动化）
+   ├─ 止损线
+   ├─ 止盈线
    └─ 到期自动平仓
 ```
 
@@ -143,9 +137,9 @@ Polymarket原生：用户签名(EIP-712) → Polymarket relayer代付 → 执行
 | 语言 | Python 3.11+ | 生态丰富、AI/ML首选 |
 | AI | Claude API | 强大推理能力、预测市场分析 |
 | 回测 | VectorBT | 向量化计算、性能极快 |
-| Gasless | Polymarket原生 + Gelato | 原生免费交易 + 自动化增强 |
+| Gasless | Polymarket原生 | 原生免费交易，无需第三方 |
 | 交易API | py-clob-client | Polymarket官方SDK |
-| Web3 | web3.py | 成熟的以太坊开发库 |
+| Web3 | web3.py | 余额查询等链上操作 |
 
 ### 风险管理机制
 
@@ -153,22 +147,6 @@ Polymarket原生：用户签名(EIP-712) → Polymarket relayer代付 → 执行
 2. **每日亏损限制**：当日亏损超过10%自动停止
 3. **Kelly分数**：使用分数Kelly（非全部）增加安全性
 4. **流动性过滤**：只交易流动性好的市场
-5. **Gas预算**：Gelato Gas Tank（仅用于自动化）
-
-## 架构文档
-
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - 详细架构设计
-- [RESEARCH.md](docs/RESEARCH.md) - 研究其他gasless项目的心得
-
-## 快速开始
-
-- [ ] 实现三种策略（AI/ML/自定义）✓
-- [ ] Gelato Gasless集成 ✓
-- [ ] VectorBT回测引擎 ✓
-- [ ] 完整的风险管理体系 ✓
-- [ ] 实盘交易验证
-- [ ] 策略参数优化
-- [ ] Web界面
 
 ## 快速开始
 
@@ -179,7 +157,6 @@ pip install -e ".[dev]"
 # 配置
 cp .env.example .env
 # 填入API密钥 (POLYGON_WALLET_PRIVATE_KEY, ANTHROPIC_API_KEY)
-# GELATO_API_KEY 可选（用于自动化功能）
 
 # 查看市场
 polybot markets
@@ -193,6 +170,11 @@ polybot run --strategy ai --dry-run
 # 实盘运行
 polybot run --strategy ai
 ```
+
+## 架构文档
+
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - 详细架构设计
+- [RESEARCH.md](docs/RESEARCH.md) - 研究其他gasless项目的心得
 
 ## 许可证
 
