@@ -54,7 +54,8 @@ def run(strategy, dry_run):
 
     # Initialize components
     polymarket = PolymarketClient(config)
-    gelato = GelatoRelay(config)
+    # Gelato is optional - only needed for on-chain approvals/automation
+    gelato = GelatoRelay(config) if config.gelato_api_key else None
     executor = OrderExecutor(polymarket, gelato, config)
     strategist = get_strategist(config)
     scanner = MarketScanner(polymarket)
@@ -158,6 +159,9 @@ def status(task):
         click.echo(f"Strategy: {config.strategy_type.value}")
         click.echo(f"Scan Interval: {config.scan_interval}s")
     elif task == 'gelato':
+        if not config.gelato_api_key:
+            click.echo("Gelato not configured (no API key)")
+            return
         gelato = GelatoRelay(config)
         balance = asyncio.run(gelato.get_balance())
         click.echo(f"=== Gelato Status ===")

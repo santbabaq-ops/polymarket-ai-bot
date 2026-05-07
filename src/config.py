@@ -9,6 +9,9 @@ from typing import Optional
 import yaml
 from dotenv import load_dotenv
 
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
 load_dotenv()
 
 
@@ -94,8 +97,10 @@ class Config:
         if self.strategy_type == StrategyType.AI and not self.anthropic_api_key:
             errors.append("ANTHROPIC_API_KEY is required for AI strategy")
 
+        # Gelato is optional - only needed for on-chain operations
+        # CLOB orders are gasless via Polymarket's native relayer
         if not self.gelato_api_key:
-            errors.append("GELATO_API_KEY is required")
+            logger.info("GELATO_API_KEY not set - on-chain operations will be unavailable")
 
         if self.max_position_size <= 0:
             errors.append("MAX_POSITION_SIZE must be positive")

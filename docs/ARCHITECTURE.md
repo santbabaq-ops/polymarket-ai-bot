@@ -1,140 +1,223 @@
-# Architecture Documentation
+# Polymarket AI Trading Bot - Architecture
 
 ## Overview
 
-The Polymarket AI Trading Bot is designed with a modular architecture separating concerns into distinct layers:
+This is a gasless AI trading bot for Polymarket's 5min/15min prediction markets. It combines:
+- **Native Polymarket gasless CLOB trading** (EIP-712 off-chain signing)
+- **AI-powered strategies** (Claude API)
+- **Backtesting engine** (VectorBT)
+- **Optional Gelato integration** for on-chain operations and automation
 
-1. **Strategy Layer**: AI/ML/custom strategies for signal generation
-2. **Backtesting Layer**: Historical validation using VectorBT
-3. **Execution Layer**: Order execution via Polymarket CLOB + Gelato
+## Key Design Decisions
 
-## Component Diagrams
+### 1. Native Gasless Trading (Primary)
 
-### Trading Flow
+**Discovery**: Polymarket's CLOB client already supports gasless trading via EIP-712 off-chain signing. Orders are signed locally and submitted to Polymarket's API, which handles gas payment through their relayer.
 
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│ Market Scan  │────▶│ Strategy     │────▶│ Signal Gen   │────▶│ Executor     │
-│ (5min/15min) │     │ (AI/ML)      │     │              │     │ (Gelato)     │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
-```
-
-### Backtest Flow
-
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│ Historical   │────▶│ Data Prep    │────▶│ Strategy     │────▶│ Performance  │
-│ Data Fetch   │     │ (VectorBT)   │     │ Simulation   │     │ Analysis     │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+**Implementation**:
+```python
+# Standard trading - NO gas fees, NO Gelato needed
+order = client.create_order(token_id, side, price, size)
+client.post_order(order)  # Polymarket relayer pays gas
 ```
 
-## Key Modules
+**Benefits**:
+- Zero gas fees for users
+- Simpler architecture
+- Faster execution (no relayer round-trip)
+- More reliable (single API call)
 
-### Trading Module
+### 2. Gelato Integration (Secondary)
 
-| File | Purpose |
-|------|---------|
-| `polymarket_client.py` | Polymarket CLOB API integration |
-| `gelato_relay.py` | Gelato Turbo Relayer for gasless tx |
-| `order_executor.py` | Order execution orchestration |
+Gelato is reserved for specific use cases that require on-chain execution:
 
-### Strategy Module
+| Use Case | Gelato Feature | Why Needed |
+|----------|---------------|------------|
+| Token approvals (USDC/CTF) | SponsoredCall | On-chain ERC20 approve |
+| Stop-loss automation | Web3 Functions | Serverless execution |
+| Take-profit automation | Web3 Functions | Serverless execution |
+| Conditional orders | Web3 Functions | Price-based triggers |
 
-| File | Purpose |
-|------|---------|
-| `base.py` | Abstract base class for strategies |
-| `ai_strategist.py` | Claude API-powered analysis |
-| `ml_strategist.py` | Local ML model predictions |
-| `signal_generator.py` | Multi-indicator consensus |
-| `position_sizer.py` | Kelly criterion sizing |
+### 3. Dual Automation Approach
 
-### Backtest Module
+We provide two automation options:
 
-| File | Purpose |
-|------|---------|
-| `backtest_engine.py` | VectorBT-powered backtesting |
-| `historical_fetcher.py` | Data fetching/caching |
-| `performance_analyzer.py` | Metrics calculation |
+**Option A: Gelato Web3 Functions** (Serverless)
+- Runs on Gelato's infrastructure
+- Bot can be offline
+- Requires Gelato API key
 
-## API Integrations
+**Option B: Local Automation Manager** (In-process)
+- Runs within the bot process
+- Requires bot to be running
+- No Gelato dependency
+- Good for testing/development
 
-### Polymarket CLOB API
+## Architecture Diagram
 
-- Endpoint: `https://clob.polymarket.com`
-- Order matching on Polygon
-- Low latency execution
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      CLI / Web UI                           │
+│         (Click commands: run, backtest, markets)           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                    Strategy Engine                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │ AI Strategist│  │ Signal Gen │  │ Kelly Sizing        │ │
+│  │ (Claude)    │  │ Module     │  │ Module              │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                 Backtesting Engine                           │
+│  - VectorBT for fast historical backtesting                 │
+│  - Sliding window validation                                │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                 Trading Execution Layer                      │
+│  ┌────────────────────────┐  ┌──────────────────────────┐  │
+│  │ Polymarket CLOB Client │  │ Gelato Relay (Optional)  │  │
+│  │ - Native gasless       │  │ - Token approvals        │  │
+│  │ - EIP-712 signing      │  │ - Automation tasks       │  │
+│  │ - Order management     │  │ - Web3 Functions         │  │
+│  └────────────────────────┘  └──────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### Gelato Turbo Relayer
+## Gasless Transaction Flow
 
-- Gasless transactions on Polygon
-- Sponsored transaction mode
-- WebSocket status updates
+### Standard CLOB Order (Gasless)
 
-### Claude API
+```
+User Bot                    Polymarket API              Relayer
+   │                             │                         │
+   │── 1. Create order ─────────>│                         │
+   │                             │                         │
+   │── 2. Sign (EIP-712) ───────>│                         │
+   │                             │── 3. Submit to relayer ─>│
+   │                             │                         │── 4. Pay gas & execute
+   │                             │<─ 5. Confirmation ───────│
+   │<─ 6. Order ID ──────────────│                         │
+```
 
-- Market analysis prompts
-- Signal generation
-- Strategy refinement
+### On-chain Operation via Gelato
 
-## Data Flow
+```
+User Bot          Gelato API         Relayer         Blockchain
+   │                 │                  │                │
+   │── 1. Submit tx ->│                │                │
+   │                 │── 2. Queue ────>│                │
+   │                 │                │── 3. Execute ──>│
+   │                 │<─ 4. Receipt ───│<─ 5. Confirm ───│
+   │<─ 6. Task ID ────│                │                │
+```
 
-### Real-time Trading
+## Project Structure
 
-1. Market scanner finds 5min/15min markets
-2. Strategy analyzes market data
-3. Signal generator produces actionable signal
-4. Position sizer calculates optimal size
-5. Order executor sends via Gelato (gasless)
-6. Status updates via WebSocket
-
-### Backtesting
-
-1. Historical fetcher retrieves market data
-2. Data prepared as OHLCV DataFrame
-3. Strategy generates signals on historical data
-4. VectorBT simulates portfolio
-5. Performance analyzer computes metrics
-6. Results cached for comparison
+```
+polymarket-ai-bot/
+├── README.md
+├── pyproject.toml
+├── .env.example
+├── src/
+│   ├── __init__.py
+│   ├── main.py                    # CLI entry point
+│   ├── config.py                  # Configuration management
+│   ├── trading/
+│   │   ├── __init__.py
+│   │   ├── polymarket_client.py   # CLOB API wrapper (native gasless)
+│   │   ├── gelato_relay.py        # Gelato relay for on-chain ops
+│   │   ├── gelato_automation.py   # Web3 Functions + local automation
+│   │   └── order_executor.py      # Order execution logic
+│   ├── strategy/
+│   │   ├── __init__.py
+│   │   ├── base.py                # Base strategy interface
+│   │   ├── ai_strategist.py       # Claude-powered strategy
+│   │   ├── ml_strategist.py       # Local ML strategy
+│   │   ├── custom_strategist.py   # User custom strategies
+│   │   ├── signal_generator.py    # Signal generation
+│   │   └── position_sizer.py      # Kelly criterion sizing
+│   ├── backtest/
+│   │   ├── __init__.py
+│   │   ├── historical_fetcher.py  # Fetch historical data
+│   │   ├── backtest_engine.py     # VectorBT backtesting
+│   │   └── performance_analyzer.py # Strategy evaluation
+│   └── utils/
+│       ├── __init__.py
+│       ├── logging.py
+│       └── market_scanner.py      # Find 5min/15min markets
+├── tests/
+│   ├── test_trading.py
+│   ├── test_strategy.py
+│   └── test_backtest.py
+└── docs/
+    ├── ARCHITECTURE.md            # This file
+    └── RESEARCH.md                # Research findings
+```
 
 ## Configuration
 
-Configuration is loaded from:
-1. `config.yaml` (if exists)
-2. Environment variables
-3. Default values
-
-See `config.py` for all options.
-
-## Extension Points
-
-### Custom Strategy
-
-Implement `BaseStrategy`:
-```python
-class MyStrategy(BaseStrategy):
-    async def analyze(self, market):
-        # Custom logic
-        return Signal(...)
+### Required (for basic trading)
+```
+POLYGON_WALLET_PRIVATE_KEY=0x...
+ANTHROPIC_API_KEY=sk-ant-...  # Only for AI strategy
 ```
 
-### Custom Indicator
-
-Add to `SignalGenerator`:
-```python
-def my_indicator(market):
-    return {'signal': 'BUY', 'confidence': 0.7}
+### Optional (for advanced features)
+```
+GELATO_API_KEY=...              # For on-chain approvals/automation
+POLYMARKET_API_KEY=...          # If required by API
 ```
 
-## Error Handling
+## API Keys Summary
 
-- Retry logic for API failures
-- Circuit breaker for repeated failures
-- Graceful degradation
-- Detailed logging
+| Key | Required | Purpose |
+|-----|----------|---------|
+| `POLYGON_WALLET_PRIVATE_KEY` | Yes | Signing orders |
+| `ANTHROPIC_API_KEY` | Yes (AI strategy) | Claude strategy generation |
+| `GELATO_API_KEY` | No | On-chain ops, automation |
 
-## Security
+## Testing
 
-- Private keys in environment variables
-- No secrets in code
-- API key rotation support
-- Transaction signing separation
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific module
+pytest tests/test_trading.py -v
+pytest tests/test_strategy.py -v
+pytest tests/test_backtest.py -v
+```
+
+## Deployment
+
+### Local Development
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+python -m src.main run --dry-run
+```
+
+### Production
+```bash
+# Set environment variables
+export POLYGON_WALLET_PRIVATE_KEY=...
+export ANTHROPIC_API_KEY=...
+
+# Run with AI strategy
+python -m src.main run --strategy ai
+
+# Run backtest
+python -m src.main backtest MARKET_ID --strategy ai
+```
+
+## References
+
+- [Polymarket CLOB Client](https://github.com/Polymarket/py-clob-client)
+- [Polymarket CLOB Client TS](https://github.com/Polymarket/clob-client) - Shows native gasless support
+- [Gelato Relay SDK](https://github.com/gelatodigital/relay-sdk)
+- [Gelato Web3 Functions](https://github.com/gelatodigital/web3-functions-sdk)
+- [VectorBT](https://github.com/polakowo/vectorbt)

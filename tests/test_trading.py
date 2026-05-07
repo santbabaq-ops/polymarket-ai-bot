@@ -151,29 +151,8 @@ class TestOrderExecutor:
         assert result.order_id == "order-123"
 
     @pytest.mark.asyncio
-    async def test_execute_limit_order_gelato(self, executor):
-        """Test limit order via Gelato"""
-        executor.gelato.simulate_transaction = AsyncMock(return_value={"success": True})
-        executor.gelato.send_transaction_sync = AsyncMock(return_value=RelayReceipt(
-            task_id="task-123",
-            transaction_hash="0xabc",
-            status="success"
-        ))
-
-        result = await executor.execute_limit_order(
-            token_id="123",
-            side="BUY",
-            price=0.55,
-            size=10.0,
-            use_gelato=True
-        )
-
-        assert result.success is True
-        assert result.transaction_hash == "0xabc"
-
-    @pytest.mark.asyncio
-    async def test_execute_limit_order_clob(self, executor):
-        """Test limit order via CLOB (no Gelato)"""
+    async def test_execute_limit_order_native(self, executor):
+        """Test limit order via native Polymarket gasless CLOB"""
         executor.polymarket.create_order = AsyncMock(return_value="clob-order-123")
 
         result = await executor.execute_limit_order(
@@ -181,11 +160,28 @@ class TestOrderExecutor:
             side="BUY",
             price=0.55,
             size=10.0,
-            use_gelato=False
         )
 
         assert result.success is True
         assert result.order_id == "clob-order-123"
+
+    @pytest.mark.asyncio
+    async def test_execute_limit_order_gelato(self, executor):
+        """Test token approval via Gelato (on-chain operation)"""
+        executor.gelato.send_transaction_sync = AsyncMock(return_value=RelayReceipt(
+            task_id="task-123",
+            transaction_hash="0xabc",
+            status="success"
+        ))
+
+        result = await executor.approve_token_gelato(
+            token_address="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",  # USDC
+            spender_address="0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",  # CTF
+            amount=1000000,
+        )
+
+        assert result.success is True
+        assert result.transaction_hash == "0xabc"
 
     @pytest.mark.asyncio
     async def test_execute_cancel(self, executor):

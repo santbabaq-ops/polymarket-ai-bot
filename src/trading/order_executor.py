@@ -1,4 +1,4 @@
-"""Order executor combining Polymarket client with Gelato relay"""
+"""Order executor for Polymarket CLOB with native gasless support"""
 
 from typing import Optional
 from dataclasses import dataclass
@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from src.config import Config
 from src.utils.logging import get_logger
-from .polymarket_client import PolymarketClient, CLOB_EXCHANGE_ADDRESS
+from .polymarket_client import PolymarketClient
 from .gelato_relay import GelatoRelay
 
 
@@ -25,18 +25,22 @@ class ExecutionResult:
 
 class OrderExecutor:
     """
-    Executes orders on Polymarket using gasless transactions via Gelato.
+    Executes orders on Polymarket using native gasless CLOB trading.
 
-    Supports two modes:
-    1. Direct CLOB (for CLOB-only orders, gasless by nature)
-    2. Gelato relay (for on-chain settlement)
+    Key insight: Polymarket CLOB client already supports gasless trading
+    via EIP-712 off-chain signing. Orders are signed locally and submitted
+    to Polymarket's API, which handles gas payment via their relayer.
+
+    Gelato is reserved for:
+    - Token approvals (USDC/CTF)
+    - Conditional automation (stop-loss, take-profit via Web3 Functions)
     """
 
     def __init__(
         self,
         polymarket: PolymarketClient,
-        gelato: GelatoRelay,
-        config: Config,
+        gelato: Optional[GelatoRelay] = None,
+        config: Optional[Config] = None,
     ):
         self.polymarket = polymarket
         self.gelato = gelato
@@ -48,52 +52,26 @@ class OrderExecutor:
         side: str,  # "BUY" or "SELL"
         price: float,
         size: float,
-        use_gelato: bool = True,
     ) -> ExecutionResult:
         """
-        Execute a limit order.
+        Execute a limit order using native Polymarket gasless CLOB.
 
-        For CLOB orders (matches against order book), Gelato is not needed.
-        For on-chain settlement, uses Gelato for gasless execution.
+        This uses EIP-712 off-chain signing - no gas fees required.
+        The order is signed locally and submitted to Polymarket's API,
+        which relays it via their gasless relayer.
         """
         try:
-            if use_gelato:
-                # Get calldata for gasless execution
-                calldata = self._build_order_calldata(token_id, side, price, size)
+            order_id = await self.polymarket.create_order(
+                token_id=token_id,
+                side=side,
+                price=price,
+                size=size,
+            )
 
-                # Simulate first
-                sim_result = await self.gelato.simulate_transaction(
-                    target=CLOB_EXCHANGE_ADDRESS,
-                    data=calldata,
-                )
-
-                if not sim_result.get("success", False):
-                    error = sim_result.get("error", "Simulation failed")
-                    logger.warning(f"Order simulation failed: {error}")
-
-                # Send via Gelato
-                receipt = await self.gelato.send_transaction_sync(
-                    target=CLOB_EXCHANGE_ADDRESS,
-                    data=calldata,
-                )
-
-                return ExecutionResult(
-                    success=True,
-                    transaction_hash=receipt.transaction_hash,
-                )
-            else:
-                # Direct CLOB order (no gas needed for matching)
-                order_id = await self.polymarket.create_order(
-                    token_id=token_id,
-                    side=side,
-                    price=price,
-                    size=size,
-                )
-
-                return ExecutionResult(
-                    success=True,
-                    order_id=order_id,
-                )
+            return ExecutionResult(
+                success=True,
+                order_id=order_id,
+            )
 
         except Exception as e:
             logger.error(f"Order execution failed: {e}")
@@ -146,7 +124,7 @@ class OrderExecutor:
         """
         Execute multiple orders in batch.
 
-        Orders are submitted via Gelato relay for gas efficiency.
+        Each order is submitted via native Polymarket gasless CLOB.
         """
         results = []
 
@@ -165,51 +143,50 @@ class OrderExecutor:
 
         return results
 
-    def _build_order_calldata(
+    async def approve_token_gelato(
         self,
-        token_id: str,
-        side: str,
-        price: float,
-        size: float,
-    ) -> str:
+        token_address: str,
+        spender_address: str,
+        amount: int,
+    ) -> ExecutionResult:
         """
-        Build calldata for order execution.
+        Approve token spending via Gelato (on-chain operation requiring gas).
 
-        This encodes the order data for the CLOB exchange contract.
-        Uses py_order_utils for proper encoding when available.
+        This is the primary use case for Gelato - handling on-chain approvals
+        that cannot be done through the CLOB API.
         """
+        if not self.gelato:
+            return ExecutionResult(
+                success=False,
+                error="Gelato relay not configured",
+            )
+
         try:
-            from py_order_utils.builders import OrderBuilder
-            from py_order_utils.model import OrderData
-            from py_order_utils.signer import Signer
+            # Build ERC20 approve calldata
+            from web3 import Web3
+            w3 = Web3()
 
-            signer = Signer(self.config.wallet_private_key)
-            builder = OrderBuilder(
-                self.polymarket.CLOB_EXCHANGE_ADDRESS,
-                self.config.gelato_chain_id,
-                signer
+            # ERC20 approve(address,uint256)
+            selector = w3.keccak(text="approve(address,uint256)")[:4]
+            params = (
+                w3.to_bytes(hexstr=spender_address).rjust(32, b'\x00')
+                + amount.to_bytes(32, 'big')
+            )
+            data = "0x" + (selector + params).hex()
+
+            receipt = await self.gelato.send_transaction_sync(
+                target=token_address,
+                data=data,
             )
 
-            maker_amount = int(size * 1e6)  # USDC has 6 decimals
-            taker_amount = int((1 - price) * size * 1e6) if side == "BUY" else int(price * size * 1e6)
-
-            order_data = OrderData(
-                maker=self.polymarket.address,
-                tokenId=token_id,
-                makerAmount=maker_amount,
-                takerAmount=taker_amount,
-                feeRateBps="100",  # 1% fee
-                nonce=0,
-                side=side,
-                expiration=0,
+            return ExecutionResult(
+                success=True,
+                transaction_hash=receipt.transaction_hash,
             )
 
-            order = builder.build_signed_order(order_data)
-            return order
         except Exception as e:
-            # Fallback for testing - return simple hex
-            logger.debug(f"Using fallback calldata: {e}")
-            return "0x" + "00" * 64
+            logger.error(f"Token approval via Gelato failed: {e}")
+            return ExecutionResult(success=False, error=str(e))
 
     async def get_execution_price(
         self,

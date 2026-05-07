@@ -15,18 +15,20 @@
 
 #### 1. Gasless交易方案
 
-**问题**：Polygon每笔交易需要Gas费
+**重大发现**：Polymarket CLOB API本身就支持无Gas交易！
 
-**解决方案**：使用Gelato Turbo Relayer
-- Gelato是一个去中心化的自动化网络
-- 支持"赞助交易"（Sponsored Transactions）
-- 用户签名，Gelato节点代付Gas
-- 通过Gas Tank（Gas池）结算
+Polymarket的CLOB客户端使用EIP-712离链签名，用户签名订单后提交到Polymarket API，由Polymarket的relayer代付Gas上链。这意味着**标准交易完全免费**。
 
 ```
 传统流程：用户 → 付Gas → 执行交易
-Gelato流程：用户签名 → Gelato代付 → 用户交易（零Gas）
+Gelato流程：用户签名 → Gelato代付 → 执行交易
+Polymarket原生：用户签名(EIP-712) → Polymarket relayer代付 → 执行交易 ✓
 ```
+
+**Gelato的适用场景**（可选）：
+- 代币授权（USDC/CTF approve）
+- 自动化策略（止损/止盈）
+- 条件单执行
 
 #### 2. AI策略架构
 
@@ -123,14 +125,14 @@ Gelato流程：用户签名 → Gelato代付 → 用户交易（零Gas）
    ├─ 胜率 × 赔率 = 期望值
    └─ 期望值为正才交易
    ↓
-5. Gelato执行（无Gas）
-   ├─ 签名交易
-   ├─ 发送到Gelato节点
-   └─ 节点代付Gas执行
+5. Polymarket原生执行（无Gas）
+   ├─ 本地签名订单(EIP-712)
+   ├─ 提交到Polymarket API
+   └─ Polymarket relayer代付Gas
    ↓
 6. 监控仓位
-   ├─ 止损线
-   ├─ 止盈线
+   ├─ 止损线（本地或Gelato自动化）
+   ├─ 止盈线（本地或Gelato自动化）
    └─ 到期自动平仓
 ```
 
@@ -141,9 +143,9 @@ Gelato流程：用户签名 → Gelato代付 → 用户交易（零Gas）
 | 语言 | Python 3.11+ | 生态丰富、AI/ML首选 |
 | AI | Claude API | 强大推理能力、预测市场分析 |
 | 回测 | VectorBT | 向量化计算、性能极快 |
-| Gasless | Gelato | 去中心化、免费额度、Polygon原生 |
+| Gasless | Polymarket原生 + Gelato | 原生免费交易 + 自动化增强 |
 | 交易API | py-clob-client | Polymarket官方SDK |
-| Web3 | web3.py + viem | 成熟的以太坊开发库 |
+| Web3 | web3.py | 成熟的以太坊开发库 |
 
 ### 风险管理机制
 
@@ -151,9 +153,14 @@ Gelato流程：用户签名 → Gelato代付 → 用户交易（零Gas）
 2. **每日亏损限制**：当日亏损超过10%自动停止
 3. **Kelly分数**：使用分数Kelly（非全部）增加安全性
 4. **流动性过滤**：只交易流动性好的市场
-5. **Gas预算**：Gelato Gas Tank用完自动暂停
+5. **Gas预算**：Gelato Gas Tank（仅用于自动化）
 
-### 项目目标
+## 架构文档
+
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - 详细架构设计
+- [RESEARCH.md](docs/RESEARCH.md) - 研究其他gasless项目的心得
+
+## 快速开始
 
 - [ ] 实现三种策略（AI/ML/自定义）✓
 - [ ] Gelato Gasless集成 ✓
@@ -171,7 +178,8 @@ pip install -e ".[dev]"
 
 # 配置
 cp .env.example .env
-# 填入API密钥
+# 填入API密钥 (POLYGON_WALLET_PRIVATE_KEY, ANTHROPIC_API_KEY)
+# GELATO_API_KEY 可选（用于自动化功能）
 
 # 查看市场
 polybot markets
