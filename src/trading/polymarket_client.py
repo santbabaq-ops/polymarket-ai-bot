@@ -37,7 +37,7 @@ class PolymarketClient:
         self.clob = ClobClient(
             host=CLOB_API_URL,
             key=config.wallet_private_key,
-            chain_id=config.gelato_chain_id,
+            chain_id=137,  # Polygon mainnet
         )
 
         # HTTP client for Gamma API
@@ -260,7 +260,7 @@ class PolymarketClient:
         from py_order_utils.signer import Signer
 
         signer = Signer(self.config.wallet_private_key)
-        builder = OrderBuilder(CLOB_EXCHANGE_ADDRESS, self.config.gelato_chain_id, signer)
+        builder = OrderBuilder(CLOB_EXCHANGE_ADDRESS, 137, signer)
 
         order_data = OrderData(
             maker=self.address,
@@ -275,3 +275,19 @@ class PolymarketClient:
 
         order = builder.build_signed_order(order_data)
         return order
+
+    def get_api_key(self) -> str:
+        """Get or create API key for CLOB"""
+        try:
+            return self.clob.get_api_key()
+        except Exception as e:
+            logger.error(f"Failed to get API key: {e}")
+            return ""
+
+    def create_api_key(self) -> str:
+        """Create a new API key"""
+        try:
+            return self.clob.create_api_key()
+        except Exception as e:
+            logger.error(f"Failed to create API key: {e}")
+            return ""

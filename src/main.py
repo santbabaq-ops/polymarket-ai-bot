@@ -15,6 +15,7 @@ from src.strategy.ml_strategist import MLStrategist
 from src.strategy.custom_strategist import CustomStrategy
 from src.backtest.backtest_engine import BacktestEngine
 from src.utils.market_scanner import MarketScanner
+from src.interactive.claude_code_interface import ClaudeCodeInterface
 
 
 logger = get_logger(__name__)
@@ -159,6 +160,23 @@ def status(task):
         balance = asyncio.run(polymarket.get_usdc_balance())
         click.echo(f"=== Wallet Status ===")
         click.echo(f"USDC Balance: {balance}")
+
+
+@cli.command()
+@click.option('--market-id', help='Specific market to analyze')
+@click.option('--interactive', '-i', is_flag=True, help='Interactive mode for Claude Code')
+def claude(market_id, interactive):
+    """Interactive Claude Code interface for strategy and backtesting."""
+    config = load_config()
+
+    interface = ClaudeCodeInterface(config)
+
+    if interactive:
+        asyncio.run(interface.interactive_loop())
+    elif market_id:
+        asyncio.run(interface.analyze_market(market_id))
+    else:
+        click.echo("Usage: polybot claude --market-id <id>  or  polybot claude -i")
 
 
 if __name__ == '__main__':
